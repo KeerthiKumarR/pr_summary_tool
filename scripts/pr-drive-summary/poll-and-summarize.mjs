@@ -3,6 +3,8 @@ import { google } from "googleapis";
 import fs from "node:fs";
 import path from "node:path";
 
+import { fileURLToPath } from "node:url";
+
 const {
   GITHUB_TOKEN,
   GH_USERNAME,
@@ -23,7 +25,8 @@ const LOOKBACK_DAYS = 7;
 // grow forever.
 const MAX_STATE_ENTRIES = 1000;
 
-const STATE_PATH = path.join(process.cwd(), "state", "last-run.json");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STATE_PATH = path.join(__dirname, "state", "last-run.json");
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
