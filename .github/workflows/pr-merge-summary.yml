@@ -1,0 +1,37 @@
+name: Summarize Merged PR to Drive
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  summarize:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: scripts/pr-drive-summary
+        run: npm install
+
+      - name: Decode Google service account key
+        run: echo "${{ secrets.GDRIVE_SERVICE_ACCOUNT_B64 }}" | base64 -d > ${{ runner.temp }}/gdrive-key.json
+
+      - name: Summarize and upload
+        working-directory: scripts/pr-drive-summary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gdrive-key.json
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          PR_AUTHOR_FILTER: ${{ vars.PR_AUTHOR_FILTER }}
+        run: node summarize-pr.mjs
