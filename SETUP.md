@@ -4,29 +4,50 @@ This polls GitHub every 30 minutes for PRs you've merged anywhere, and
 summarizes any new ones into a shared Drive folder. No changes needed in
 Music Blocks or any other repo — everything runs from this repo alone.
 
-## 1. Google service account (already done if you completed this earlier)
+## 1. Google OAuth2 Client Setup
 
-If not done yet:
-1. console.cloud.google.com → create/select a project → enable **Google
-   Drive API**.
-2. IAM & Admin → Service Accounts → Create service account → Keys → Add
-   Key → Create new key → JSON.
-3. Base64-encode it:
-   - macOS: `base64 -i key.json | tr -d '\n'`
-   - Linux: `base64 -w0 key.json`
-4. Add as repo secret `GDRIVE_SERVICE_ACCOUNT_B64`.
+To authorize the Action to write directly to your Google Drive:
+1. Go to **console.cloud.google.com** → select/create a Google Cloud project.
+2. Enable the **Google Drive API** for the project.
+3. Go to **APIs & Services → OAuth consent screen**:
+   - Set the User Type to **External** (or Internal if you are on a Google Workspace domain).
+   - Fill in the required app information (app name, email, etc.).
+   - Under **Scopes**, add `https://www.googleapis.com/auth/drive.file`.
+   - Under **Test Users**, add your own Google email address (so Google allows you to log in during authorization).
+4. Go to **APIs & Services → Credentials**:
+   - Click **Create Credentials** → **OAuth client ID**.
+   - Select **Web application** as the application type.
+   - Add Authorized redirect URIs: `http://localhost:3000/oauth2callback`.
+   - Click **Create** to obtain your `Client ID` and `Client Secret`.
+5. Add these credentials as secrets in your GitHub repository:
+   - Name: `GDRIVE_OAUTH_CLIENT_ID`
+   - Name: `GDRIVE_OAUTH_CLIENT_SECRET`
 
-## 2. Share your Drive folder
+## 2. Obtain Refresh Token
 
-Share the target Drive folder with the service account's `client_email`
-(Editor access). Get the folder ID from its URL and add it as secret
-`GDRIVE_FOLDER_ID`.
+1. Set the credentials in your local environment:
+   ```bash
+   export GDRIVE_OAUTH_CLIENT_ID="your_client_id"
+   export GDRIVE_OAUTH_CLIENT_SECRET="your_client_secret"
+   ```
+2. Navigate to `scripts/pr-drive-summary/` and run the helper script:
+   ```bash
+   node get-refresh-token.mjs
+   ```
+3. Open the printed authorization URL in your browser, log in with your Google account, and grant the request permissions.
+4. The terminal will print your **OAuth Refresh Token**. Add this to your GitHub repository secrets:
+   - Name: `GDRIVE_OAUTH_REFRESH_TOKEN`
 
-## 3. Groq API key
+## 3. Configure Target Folder (Optional)
+
+Create a folder in Google Drive where you want the docs to be saved. Grab the folder ID from the folder's URL and add it as a secret in your repository:
+   - Name: `GDRIVE_FOLDER_ID`
+
+## 4. Groq API key
 
 console.groq.com → API Keys → add as secret `GROQ_API_KEY`.
 
-## 4. Your GitHub username
+## 5. Your GitHub username
 
 Settings → Secrets and variables → Actions → **Variables** tab → New
 repository variable:
@@ -35,7 +56,7 @@ repository variable:
 
 This is required — the poller searches GitHub for `author:<GH_USERNAME>`.
 
-## 5. GITHUB_TOKEN
+## 6. GITHUB_TOKEN
 
 Provided automatically. Used both to search/read PR data and to commit the
 state file back to this repo, so the workflow needs `contents: write`

@@ -7,7 +7,6 @@ const {
   GITHUB_TOKEN,
   GH_USERNAME,
   GROQ_API_KEY,
-  GOOGLE_APPLICATION_CREDENTIALS,
   GDRIVE_FOLDER_ID,
 } = process.env;
 
@@ -187,11 +186,14 @@ ${fileList}
 }
 
 async function uploadToDrive(owner, repo, pr, content) {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: GOOGLE_APPLICATION_CREDENTIALS,
-    scopes: ["https://www.googleapis.com/auth/drive.file"],
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GDRIVE_OAUTH_CLIENT_ID,
+    process.env.GDRIVE_OAUTH_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GDRIVE_OAUTH_REFRESH_TOKEN,
   });
-  const drive = google.drive({ version: "v3", auth });
+  const drive = google.drive({ version: "v3", auth: oauth2Client });
 
   const fileName = `PR-${owner}-${repo}-${pr.number}-${pr.title}`
     .slice(0, 140)

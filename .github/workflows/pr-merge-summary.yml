@@ -24,16 +24,15 @@ jobs:
         working-directory: scripts/pr-drive-summary
         run: npm install
 
-      - name: Decode Google service account key
-        run: echo "${{ secrets.GDRIVE_SERVICE_ACCOUNT_B64 }}" | base64 -d > ${{ runner.temp }}/gdrive-key.json
-
       - name: Poll for merged PRs and summarize
         working-directory: scripts/pr-drive-summary
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_USERNAME: ${{ vars.GH_USERNAME }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gdrive-key.json
+          GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
+          GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
+          GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
         run: node poll-and-summarize.mjs
 
