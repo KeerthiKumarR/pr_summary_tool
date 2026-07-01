@@ -1,80 +1,74 @@
-# PR → Drive Auto-Summary: Setup
+# PR → Drive Auto-Summary (any repo / any org): Setup
 
-Drop `.github/workflows/pr-merge-summary.yml` and `scripts/pr-drive-summary/` into
-the root of your repo (or a fork/personal repo you control — you'll need admin
-rights to add secrets). Then:
+This polls GitHub every 30 minutes for PRs you've merged anywhere, and
+summarizes any new ones into a shared Drive folder. No changes needed in
+Music Blocks or any other repo — everything runs from this repo alone.
 
-## 1. Google service account (so the Action can write to Drive)
+## 1. Google service account (already done if you completed this earlier)
 
-1. Go to console.cloud.google.com → create a project (or reuse one) → enable
-   the **Google Drive API**.
-2. IAM & Admin → Service Accounts → Create service account. No roles needed at
-   the project level.
-3. Open the service account → Keys → Add key → JSON. This downloads a file
-   like `key.json`.
-4. Base64-encode it and copy the output:
-   ```
-   base64 -w0 key.json
-   ```
-5. In your GitHub repo: Settings → Secrets and variables → Actions → New
-   repository secret:
-   - Name: `GDRIVE_SERVICE_ACCOUNT_B64`
-   - Value: the base64 string from step 4
+If not done yet:
+1. console.cloud.google.com → create/select a project → enable **Google
+   Drive API**.
+2. IAM & Admin → Service Accounts → Create service account → Keys → Add
+   Key → Create new key → JSON.
+3. Base64-encode it:
+   - macOS: `base64 -i key.json | tr -d '\n'`
+   - Linux: `base64 -w0 key.json`
+4. Add as repo secret `GDRIVE_SERVICE_ACCOUNT_B64`.
 
-## 2. Share the Drive folder
+## 2. Share your Drive folder
 
-1. Create (or pick) a Drive folder for your PR write-ups.
-2. Open the service account's JSON key file, find the `client_email` field
-   (looks like `something@project.iam.gserviceaccount.com`).
-3. Share the Drive folder with that email address (Editor access).
-4. Grab the folder ID from the folder's URL:
-   `https://drive.google.com/drive/folders/<THIS_PART>`
-5. Add a repo secret:
-   - Name: `GDRIVE_FOLDER_ID`
-   - Value: the folder ID
+Share the target Drive folder with the service account's `client_email`
+(Editor access). Get the folder ID from its URL and add it as secret
+`GDRIVE_FOLDER_ID`.
 
 ## 3. Groq API key
 
-1. Get a key from console.groq.com (Keys).
-2. Add a repo secret:
-   - Name: `GROQ_API_KEY`
-   - Value: your key
+console.groq.com → API Keys → add as secret `GROQ_API_KEY`.
 
-Note: this uses your own API credits — the summary call is small (~1-2k
-tokens per PR), so cost is negligible.
+## 4. Your GitHub username
 
-## 4. (Recommended) Filter to specific people
+Settings → Secrets and variables → Actions → **Variables** tab → New
+repository variable:
+- Name: `GH_USERNAME`
+- Value: your GitHub username (exactly as it appears in your profile URL)
 
-Music Blocks has many contributors — you probably want summaries for just
-yourself and a few friends, not every merge in the repo. Add a repo
-**variable** (not secret):
-
-- Settings → Secrets and variables → Actions → Variables tab → New variable
-- Name: `PR_AUTHOR_FILTER`
-- Value: a comma-separated list of GitHub usernames, e.g. `you,friend1,friend2`
-
-Leave it unset if you want every merged PR in the repo summarized. Each
-person's summary is saved as its own doc named `PR-<number>-<author>-<title>`,
-so they're easy to tell apart in the folder.
+This is required — the poller searches GitHub for `author:<GH_USERNAME>`.
 
 ## 5. GITHUB_TOKEN
 
-Nothing to do — GitHub provides this automatically to Actions.
+Provided automatically. Used both to search/read PR data and to commit the
+state file back to this repo, so the workflow needs `contents: write`
+permission (already set in the workflow file).
 
-## Done
+## How it works
 
-Merge any PR (or wait for one of yours to get merged) and check the workflow
-run under the Actions tab, then check your Drive folder for a new Google Doc
-named `PR-<number>-<author>-<title>`.
+- Runs every 30 minutes (`schedule: cron`), or trigger manually any time
+  from the Actions tab (`workflow_dispatch`).
+- Searches for PRs you merged in the last 7 days on every run (a rolling
+  window, since GitHub's search only has day-level date precision).
+- Tracks which PRs it's already summarized in
+  `scripts/pr-drive-summary/state/last-run.json`, so re-scanning the same
+  week doesn't create duplicate Drive docs. This file gets committed back
+  automatically after each run.
+- Only sees **public repositories** by default. If you ever need it to see
+  a private repo you don't own, you'd need a personal access token with
+  access to that repo, added as a separate secret, and the script updated
+  to use it instead of `GITHUB_TOKEN` for those calls — not set up here.
+
+## Testing it
+
+Go to the Actions tab → select this workflow → **Run workflow** (manual
+trigger) rather than waiting up to 30 minutes for the schedule. Check the
+run logs for how many PRs it found, and check your Drive folder afterward.
 
 ## Notes / things you might want to tweak
 
-- If you contribute to multiple repos, you'll need to add this workflow +
-  secrets to each one separately (GitHub Actions run per-repo).
-- Currently uploads as a Google Doc (converted from markdown on upload). If
-  you'd rather have plain `.md` files in Drive, change `mimeType` in
-  `uploadToDrive()` in `summarize-pr.mjs` from
-  `application/vnd.google-apps.document` to `text/markdown`.
-- The diff excerpt sent to the LLM is capped at patches under 2000 chars each
-  to keep the prompt small — big files just get their filename + line-count
-  listed without a diff.
+- `LOOKBACK_DAYS` (in `poll-and-summarize.mjs`) controls how far back each
+  search looks — 7 days by default. Increase it if you're worried about a
+  gap (e.g. Actions being paused), decrease it to reduce search result
+  volume.
+- Scheduled workflows can be delayed by GitHub during high load — treat
+  "every 30 minutes" as "roughly every 30 minutes, sometimes more."
+- If a summary fails partway (e.g. Groq API hiccup), that PR is not marked
+  processed and will be retried on the next run automatically.

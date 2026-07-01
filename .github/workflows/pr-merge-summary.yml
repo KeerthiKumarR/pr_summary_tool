@@ -1,12 +1,15 @@
-name: Summarize Merged PR to Drive
+name: Poll and Summarize Merged PRs (Any Repo) to Drive
 
 on:
-  pull_request:
-    types: [closed]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
-  summarize:
-    if: github.event.pull_request.merged == true
+  poll:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,14 +27,20 @@ jobs:
       - name: Decode Google service account key
         run: echo "${{ secrets.GDRIVE_SERVICE_ACCOUNT_B64 }}" | base64 -d > ${{ runner.temp }}/gdrive-key.json
 
-      - name: Summarize and upload
+      - name: Poll for merged PRs and summarize
         working-directory: scripts/pr-drive-summary
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_USERNAME: ${{ vars.GH_USERNAME }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gdrive-key.json
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-          PR_AUTHOR_FILTER: ${{ vars.PR_AUTHOR_FILTER }}
-        run: node summarize-pr.mjs
+        run: node poll-and-summarize.mjs
+
+      - name: Commit updated state
+        run: |
+          git config user.name "pr-summary-bot"
+          git config user.email "actions@github.com"
+          git add scripts/pr-drive-summary/state/last-run.json
+          git diff --cached --quiet || git commit -m "Update processed-PR state [skip ci]"
+          git push
